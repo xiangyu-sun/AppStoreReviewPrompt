@@ -15,7 +15,7 @@ struct UserDefaultsKeys {
     static let lastVersionPromptedForReviewKey = "lastVersionPromptedForReviewKey"
 }
 
-@available(macOS, unavailable)
+#if os(iOS)
 public final class AppStoreReviewPrompt {
 
     let configuration: ReviewPromoConfiguration
@@ -52,3 +52,4 @@ public final class AppStoreReviewPrompt {
         UIApplication.shared.open(writeReviewURL, options: [:], completionHandler: nil)
     }
 }
+#endif
