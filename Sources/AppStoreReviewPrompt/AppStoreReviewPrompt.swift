@@ -15,7 +15,7 @@ struct UserDefaultsKeys {
     static let lastVersionPromptedForReviewKey = "lastVersionPromptedForReviewKey"
 }
 
-/// Helper
+@available(macOS, unavailable)
 public final class AppStoreReviewPrompt {
 
     let configuration: ReviewPromoConfiguration
