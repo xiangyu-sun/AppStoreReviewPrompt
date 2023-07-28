@@ -15,6 +15,22 @@ struct UserDefaultsKeys {
     static let lastVersionPromptedForReviewKey = "lastVersionPromptedForReviewKey"
 }
 
+public enum AppStoreReviewPromptError: Error, CustomDebugStringConvertible {
+
+  case currentVersionNotFound
+  case reviewURLNotValid
+  
+  public var debugDescription: String {
+    switch self {
+    case .currentVersionNotFound:
+      "Expected to find a bundle version in the info dictionary"
+    case .reviewURLNotValid:
+      "Expected a valid review URL"
+    }
+  }
+  
+}
+
 public final class AppStoreReviewPrompt {
 
     let configuration: ReviewPromoConfiguration
@@ -23,7 +39,7 @@ public final class AppStoreReviewPrompt {
         self.configuration = configuration
     }
     
-    public func checkReviewRequest() {
+    public func checkReviewRequest() throws {
           // If the count has not yet been stored, this will return 0
           var count = UserDefaults.standard.integer(forKey: UserDefaultsKeys.processCompletedCountKey)
           count += 1
@@ -32,7 +48,9 @@ public final class AppStoreReviewPrompt {
           // Get the current bundle version for the app
           let infoDictionaryKey = kCFBundleVersionKey as String
           guard let currentVersion = Bundle.main.object(forInfoDictionaryKey: infoDictionaryKey) as? String
-              else { fatalError("Expected to find a bundle version in the info dictionary") }
+      else {
+            throw AppStoreReviewPromptError.currentVersionNotFound
+          }
           
           let lastVersionPromptedForReview = UserDefaults.standard.string(forKey: UserDefaultsKeys.lastVersionPromptedForReviewKey)
           
@@ -45,9 +63,11 @@ public final class AppStoreReviewPrompt {
           }
       }
     
-    public func openAppStore() {
+    public func openAppStore() throws {
         guard let writeReviewURL = URL(string: "https://itunes.apple.com/app/\(configuration.appID)?action=write-review")
-            else { fatalError("Expected a valid URL") }
+      else {
+          throw AppStoreReviewPromptError.reviewURLNotValid
+        }
       #if os(iOS)
         UIApplication.shared.open(writeReviewURL, options: [:], completionHandler: nil)
       #elseif os(macOS)
