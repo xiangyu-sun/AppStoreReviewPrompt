@@ -15,7 +15,6 @@ struct UserDefaultsKeys {
     static let lastVersionPromptedForReviewKey = "lastVersionPromptedForReviewKey"
 }
 
-#if os(iOS)
 public final class AppStoreReviewPrompt {
 
     let configuration: ReviewPromoConfiguration
@@ -49,7 +48,10 @@ public final class AppStoreReviewPrompt {
     public func openAppStore() {
         guard let writeReviewURL = URL(string: "https://itunes.apple.com/app/\(configuration.appID)?action=write-review")
             else { fatalError("Expected a valid URL") }
+      #if os(iOS)
         UIApplication.shared.open(writeReviewURL, options: [:], completionHandler: nil)
+      #elseif os(macOS)
+        NSWorkspace.shared.open(writeReviewURL)
+      #endif
     }
 }
-#endif
