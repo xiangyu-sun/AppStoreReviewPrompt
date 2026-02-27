@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "AppStoreReviewPrompt",
     platforms: [
-        .iOS(.v17), .macOS(.v14)
+        .iOS(.v16), .macOS(.v14)
     ],
     products: [
         .library(
