@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add Package.swift Sources/AppStoreReviewPrompt/AppStoreReviewPrompt.swift Tests/AppStoreReviewPromptTests/AppStoreReviewPromptTests.swift .github/workflows/ci.yml && git status)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nRelease 1.0.0\n\n- Bump swift-tools-version to 6.0 and minimum platforms to iOS 17 / macOS 14\n- Replace SKStoreReviewController with AppStore.requestReview\\(in:\\)\n- Add BundleProviding protocol to enable testability without Bundle subclassing\n- Make reviewRequester injectable via init parameter\n- Fix App Store review URL to use apps.apple.com/app/id format\n- Expand test suite with reviewRequester injection tests and @MainActor at suite level\n- Add GitHub Actions CI workflow \\(macOS + iOS Simulator jobs\\)\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git tag -a 1.0.0 -m \"Release 1.0.0\" && git push origin main && git push origin 1.0.0)"
+    ]
+  }
+}

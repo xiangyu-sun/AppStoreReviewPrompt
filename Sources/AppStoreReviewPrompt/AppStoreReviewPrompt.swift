@@ -1,4 +1,5 @@
 import StoreKit
+import Foundation
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -42,6 +43,20 @@ public struct ReviewPromoConfiguration: Sendable {
 private enum UserDefaultsKeys {
     static let processCompletedCount = "processCompletedCountKey"
     static let lastVersionPromptedForReview = "lastVersionPromptedForReviewKey"
+    /// Stores a JSON-encoded array of `TimeInterval` values (dates as `timeIntervalSinceReferenceDate`)
+    /// representing each time the review prompt was fired. Capped at 3 entries.
+    static let promptDates = "reviewPromptDatesKey"
+}
+
+/// Abstracts `Date` creation so tests can inject a fixed clock.
+public protocol DateProviding: Sendable {
+    var now: Date { get }
+}
+
+/// Production implementation that returns the real current date.
+public struct SystemDateProvider: DateProviding {
+    public init() {}
+    public var now: Date { Date() }
 }
 
 public enum AppStoreReviewPromptError: Error, CustomDebugStringConvertible, Sendable {
@@ -72,25 +87,38 @@ extension Bundle: BundleProviding {
 @MainActor
 public final class AppStoreReviewPrompt: Sendable {
 
+    /// Maximum number of times the OS will show the prompt within a rolling 365-day window.
+    private static let maxPromptsPerYear = 3
+    /// Minimum calendar days between consecutive prompts.
+    private static let minDaysBetweenPrompts: Double = 60
+
     public let configuration: ReviewPromoConfiguration
     private let userDefaults: UserDefaults
     private let bundleProvider: any BundleProviding
     private let reviewRequester: @MainActor () -> Void
+    private let dateProvider: any DateProviding
 
     public init(
         configuration: ReviewPromoConfiguration,
         userDefaults: UserDefaults = .standard,
         bundle: any BundleProviding = Bundle.main,
+        dateProvider: any DateProviding = SystemDateProvider(),
         reviewRequester: (@MainActor () -> Void)? = nil
     ) {
         self.configuration = configuration
         self.userDefaults = userDefaults
         self.bundleProvider = bundle
+        self.dateProvider = dateProvider
         self.reviewRequester = reviewRequester ?? { defaultReviewRequester() }
     }
 
-    /// Increments the process-completion counter and requests a review when the
-    /// threshold is met and the current app version hasn't been prompted yet.
+    /// Increments the process-completion counter and requests a review when all
+    /// of the following conditions are met:
+    ///
+    /// - The completion count has reached `configuration.promoteOnTime`.
+    /// - The current app version has not been prompted before.
+    /// - Fewer than 3 prompts have been shown in the last 365 days (mirrors the OS cap).
+    /// - At least 60 days have elapsed since the most recent prompt.
     ///
     /// On iOS the review dialog is presented in the active `UIWindowScene` via
     /// `AppStore.requestReview(in:)`. On macOS it is presented via the key
@@ -110,8 +138,58 @@ public final class AppStoreReviewPrompt: Sendable {
             return
         }
 
+        guard canPrompt(now: dateProvider.now) else {
+            return
+        }
+
         userDefaults.set(currentVersion, forKey: UserDefaultsKeys.lastVersionPromptedForReview)
+        recordPrompt(date: dateProvider.now)
         reviewRequester()
+    }
+
+    // MARK: - Rate-limit helpers
+
+    /// Returns `true` when the prompt is allowed based on the rolling-year cap and minimum gap.
+    private func canPrompt(now: Date) -> Bool {
+        let dates = storedPromptDates()
+        let windowStart = now.addingTimeInterval(-365 * 24 * 3600)
+
+        // Drop dates outside the 365-day window.
+        let recentDates = dates.filter { $0 > windowStart }
+
+        // Enforce OS cap: no more than 3 prompts per year.
+        guard recentDates.count < Self.maxPromptsPerYear else {
+            return false
+        }
+
+        // Enforce minimum spacing between prompts.
+        if let lastPrompt = recentDates.max() {
+            let daysSinceLast = now.timeIntervalSince(lastPrompt) / (24 * 3600)
+            guard daysSinceLast >= Self.minDaysBetweenPrompts else {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    /// Appends `date` to the stored list, keeping only the most recent `maxPromptsPerYear` entries.
+    private func recordPrompt(date: Date) {
+        var dates = storedPromptDates()
+        dates.append(date)
+        // Keep only the newest entries so storage stays bounded.
+        if dates.count > Self.maxPromptsPerYear {
+            dates = Array(dates.sorted().suffix(Self.maxPromptsPerYear))
+        }
+        let intervals = dates.map { $0.timeIntervalSinceReferenceDate }
+        userDefaults.set(intervals, forKey: UserDefaultsKeys.promptDates)
+    }
+
+    private func storedPromptDates() -> [Date] {
+        guard let intervals = userDefaults.array(forKey: UserDefaultsKeys.promptDates) as? [Double] else {
+            return []
+        }
+        return intervals.map { Date(timeIntervalSinceReferenceDate: $0) }
     }
 
     /// Opens the App Store write-a-review page for the configured app ID.
